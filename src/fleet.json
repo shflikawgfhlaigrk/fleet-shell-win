@@ -5,6 +5,13 @@
       "name": "AceOS",
       "url": "http://127.0.0.1:8765",
       "default": true
+    },
+    {
+      "id": "estate",
+      "name": "Estate",
+      "url": "http://127.0.0.1:8787",
+      "status": "planned",
+      "notes": "BlackLabelRealEstateAPI worker (JSON surface; GET / = health). Exists once `npx wrangler dev` runs in that repo — 8787 is wrangler's default dev port; real data needs the PG :5433 corpus or the founder-gated managed-PG deploy."
     }
   ]
 }
