@@ -1,0 +1,78 @@
+:root {
+  --bg: #111318;
+  --chrome: #16181d;
+  --edge: #23262d;
+  --text: #c4cdd8;
+  --dim: #6b7280;
+  --accent: #e8eaf0;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.4 "Segoe UI", system-ui, sans-serif;
+}
+
+body { display: flex; flex-direction: column; }
+
+#chrome {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 40px;
+  padding: 0 14px;
+  background: var(--chrome);
+  border-bottom: 1px solid var(--edge);
+  user-select: none;
+}
+
+#brand {
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+
+#surfaces { display: flex; gap: 4px; }
+
+#surfaces button {
+  border: 0;
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+#surfaces button:hover { color: var(--text); background: var(--edge); }
+
+#surfaces button.active { color: var(--accent); background: var(--edge); }
+
+#status {
+  margin-left: auto;
+  color: var(--dim);
+  font-size: 11px;
+}
+
+#stage { flex: 1; position: relative; }
+
+#surface {
+  display: none;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--bg);
+}
+
+#empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dim);
+}

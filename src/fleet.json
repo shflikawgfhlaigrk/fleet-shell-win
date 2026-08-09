@@ -1,0 +1,10 @@
+{
+  "surfaces": [
+    {
+      "id": "aceos",
+      "name": "AceOS",
+      "url": "http://127.0.0.1:8765",
+      "default": true
+    }
+  ]
+}
