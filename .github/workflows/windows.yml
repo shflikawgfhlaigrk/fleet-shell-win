@@ -27,6 +27,13 @@ jobs:
       - name: Install tauri CLI
         run: npm ci
 
+      - name: JS tests
+        run: npm test
+
+      - name: Rust tests
+        working-directory: src-tauri
+        run: cargo test --locked
+
       - name: Build shell
         run: npx tauri build
 

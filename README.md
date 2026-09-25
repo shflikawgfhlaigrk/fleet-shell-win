@@ -1,48 +1,103 @@
 # fleet-shell-win
 
-BlackLabel's Windows UI shell — the "build once, whole fleet" pattern the
-July 8 Circuit spike settled on (Tauri v2 default, electron-builder fallback).
-One native window with dark chrome; every app surface in the fleet plugs in
-as a URL.
+BlackLabel's desktop UI shell for Windows and Linux: the "build once, whole
+fleet" pattern the July 8 Circuit spike settled on (Tauri v2 by default,
+electron-builder as the fallback). One native window with dark chrome; every
+app surface in the fleet plugs in as a URL.
+
+(The name predates the Linux build. Renaming the repo to `fleet-shell` is
+proposed in the Linux PR and has not been done.)
 
 ## What it is
 
-A minimal Tauri v2 app. The Rust side (`src-tauri/`) is a bare window host.
-The frontend (`src/`) is plain HTML/JS chrome: it reads `src/fleet.json`,
-renders one tab per app surface, and shows the active surface in an embedded
-frame. No framework, no build step for the frontend.
+A small Tauri v2 app.
+
+- `src-tauri/` is the window host. It has one command, `probe_surface`
+  (`src-tauri/src/probe.rs`), which checks whether a surface's port answers
+  before the shell tries to show it. It only probes loopback addresses.
+- `src/` is plain HTML/JS chrome with no framework and no frontend build step.
+  - `fleet.json` is the surface registry.
+  - `registry.js` validates the registry.
+  - `probe.js` turns probe results into "what failed / why / what to do next".
+  - `motion.js` is the motion gate.
+  - `main.js` wires it all together.
 
 ## Surfaces
 
-| id | product | url | status | what serves it |
-|---|---|---|---|---|
-| `aceos` | AceOS | `http://127.0.0.1:8765` | live (default) | AceOS transport running locally — dashboard HTML |
-| `estate` | Estate | `http://127.0.0.1:8787` | planned | `npx wrangler dev` in `BlackLabelRealEstateAPI` (wrangler's default dev port). JSON API, not a dashboard — `GET /` returns health; real data needs the PG `:5433` corpus locally or the founder-gated managed-PG deploy. A proper Estate frontend for the shell does not exist yet. |
+| id | name | where | what serves it |
+|---|---|---|---|
+| `aceos` | AceOS (default) | `http://127.0.0.1:8765` (checked via `/api/capabilities`) | AceOS HQ server, `python run_hq_http.py` |
+| `hq` | HQ | `http://127.0.0.1:8791` | BlackLabel HQ dashboard |
+| `utah` | Utah deck | `http://127.0.0.1:8766` | Utah deck |
+| `sovereign` | Sovereign | port read from `~/.sovereign/dashboard.port`, checked via `/api/health` → `{"ok": true}` | Sovereign daemon, `sov start` |
+| `estate` | Estate API | `http://127.0.0.1:8787` | `npx wrangler dev` in BlackLabelRealEstateAPI (JSON, not a dashboard) |
 
-Surfaces are iframed — they must not send `X-Frame-Options: DENY`. (The
-Estate worker returns JSON with permissive CORS and no frame headers, so it
-frames fine; it just isn't a UI yet.)
+`fleet.json` holds the sources and caveats for each entry (`notes`).
 
-## How AceOS plugs in
+### When a surface isn't running
 
-Run the AceOS transport locally so its dashboard is on `http://127.0.0.1:8765`,
-then launch the shell. AceOS is the default surface in `fleet.json`, so it
-loads on start.
+Each tab has a status dot: grey means not running, green running, amber
+something else is on the port or it can't be framed, red an error, and blue
+still checking. The dot's tooltip gives the same state as text. When the
+active surface doesn't answer, the stage shows a panel with **What failed**,
+**Why** and **What to do next** (the start command from `fleet.json`), plus a
+**Retry** button. The panel replaces the blank frame. Each case is handled
+separately:
 
-## Adding the next surface (Leads, etc.)
+- connection refused, or timed out
+- port file missing, unreadable or invalid
+- a WebSocket server holding the port (HTTP 426)
+- a non-HTTP listener, or one that stays silent
+- a health check that doesn't return `ok: true`
+- HTTP errors (5xx and other statuses)
+- `X-Frame-Options` / `frame-ancestors` refusing to be framed
+- a misconfigured entry
+
+Bad `fleet.json` entries are listed in a banner at the top, never silently dropped.
+
+Surfaces are iframed, so they must not send `X-Frame-Options: DENY`. If one
+does, the shell says so.
+
+## Adding a surface
 
 Append an entry to `src/fleet.json` and rebuild:
 
 ```json
-{ "id": "leads", "name": "Leads", "url": "http://127.0.0.1:9100" }
+{ "id": "leads", "name": "Leads", "url": "http://127.0.0.1:9100",
+  "start": "Run `npm start` in BlackLabelLeadsAPI." }
 ```
 
-Extra keys (`status`, `notes`) are ignored by the chrome and safe to use as
-metadata.
+The keys are:
+
+- `url`, a loopback `http://` URL. Use it or `portFile`, not both.
+- `portFile`, a file holding the port number. `~/` is allowed.
+- `healthPath` and `expectOkJson`, both optional.
+- `start`, shown as the next step when the surface is down.
+- `portNote`, shown when another program holds the port.
+- `notes`, a free-form record that the chrome ignores.
+
+## Motion
+
+Motion follows `BlackLabel-Team/CONTEXT/FLEET-MOTION-STANDARD-20260709.md`:
+
+- It is off on a fresh profile.
+- The **Motion** checkbox in the chrome turns it on, and the choice persists.
+- Effective motion is `enabled && !prefers-reduced-motion`.
+- `styles.css` animates only under `:root[data-motion="on"]`, and a test enforces that.
 
 ## Building
 
-- **CI** — `.github/workflows/windows.yml` builds on `windows-latest` and
-  uploads the NSIS installer artifact on every push.
-- **Local** — needs Rust + Node: `npm ci`, then `npx tauri build`
-  (or `npx tauri dev`).
+- **CI**:
+  - `.github/workflows/windows.yml` runs on `windows-latest`: tests, then the NSIS installer.
+  - `.github/workflows/linux.yml` runs on `ubuntu-latest`: tests, then the deb + AppImage, then an end-to-end run of the built binary under Xvfb. It uploads `e2e/out/` with screenshots and `report.json`.
+- **Local**: needs Rust and Node 22.
+  - `npm ci`
+  - `npm test` for the JS tests.
+  - `cd src-tauri && cargo test` for the Rust tests.
+  - `npx tauri build` builds the app.
+  - Linux also needs `libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libsoup-3.0-dev patchelf`.
+  - `src-tauri/tauri.linux.conf.json` switches Linux bundles to deb + AppImage.
+- **End to end (Linux)**:
+  - `apt install xvfb webkit2gtk-driver`
+  - `cargo install tauri-driver --locked`
+  - `xvfb-run -a npm run e2e`
