@@ -4,14 +4,70 @@
       "id": "aceos",
       "name": "AceOS",
       "url": "http://127.0.0.1:8765",
-      "default": true
+      "healthPath": "/api/capabilities",
+      "default": true,
+      "start": "Start the AceOS HQ server: run `python run_hq_http.py` in the AceOS repo (on the Mac, launchd runs it as com.ace.hq_http).",
+      "notes": "AceOS README.md: dashboard at http://127.0.0.1:8765. /api/capabilities is the unauthenticated smoke check AceOS's own train_autopilot uses; probing it stops the Sovereign daemon (which can also bind :8765 when AceOS is down) from being mistaken for AceOS."
+    },
+    {
+      "id": "hq",
+      "name": "HQ",
+      "url": "http://127.0.0.1:8791",
+      "start": "Start the BlackLabel HQ dashboard (BlackLabelHQ repo) so it listens on 127.0.0.1:8791.",
+      "notes": "Port :8791 comes from the lane brief and BlackLabel-Team STATE/research/BACKLOG.md ('HQ dash :8791'). The BlackLabelHQ repo was not readable from the build session, so its start command is not verified here."
+    },
+    {
+      "id": "utah",
+      "name": "Utah deck",
+      "url": "http://127.0.0.1:8766",
+      "start": "Start the Utah deck so it serves HTTP on 127.0.0.1:8766.",
+      "portNote": "AceOS's event WebSocket (acesd/core/ws_server.py) also defaults to 127.0.0.1:8766. If the shell reports a WebSocket server here, that is AceOS holding the deck's port.",
+      "notes": "Port :8766 comes from the lane brief and BlackLabel-Team substrate evidence ('Utah deck :8766 HTTP 200'). The deck's start command is not verified from the build session."
+    },
+    {
+      "id": "sovereign",
+      "name": "Sovereign",
+      "portFile": "~/.sovereign/dashboard.port",
+      "healthPath": "/api/health",
+      "expectOkJson": true,
+      "start": "Start the Sovereign daemon with `sov start` (it ships with the Sovereign daemon kit, a separate install from the app).",
+      "notes": "No fixed port: the daemon writes its bound port (8765-8785, off 8765 when AceOS holds it) to ~/.sovereign/dashboard.port, and /api/health answers {\"ok\": true}. Source: BlackLabelSovereign Sources/ToolClient.swift. The daemon is launchd-managed on the Mac; whether it runs on Linux or Windows is not verified."
+    },
+    {
+      "id": "realestate",
+      "name": "Real Estate",
+      "url": "http://127.0.0.1:4178",
+      "healthPath": "/healthz",
+      "expectOkJson": true,
+      "expectFields": {
+        "service": "blacklabel-realestate-web"
+      },
+      "start": "Run `node web/server.mjs` in the BlackLabelRealEstate repo (Node 22 or newer).",
+      "portNote": "The port can be moved with BLRE_WEB_PORT; if it was, update this entry's url to match.",
+      "notes": "Lane P3, shflikawgfhlaigrk/BlackLabelRealEstate#4 (draft). Checked against that PR's web/server.mjs: DEFAULT_PORT 4178, loopback only, GET /healthz -> {\"ok\":true,\"service\":\"blacklabel-realestate-web\"}. Its CSP has no frame-ancestors and it sends no X-Frame-Options, so it can be framed."
+    },
+    {
+      "id": "marketing",
+      "name": "Marketing",
+      "url": "http://127.0.0.1:47310",
+      "healthPath": "/api/health",
+      "expectOkJson": true,
+      "healthHeaders": {
+        "x-bl-surface": "marketing"
+      },
+      "expectFields": {
+        "surface": "marketing"
+      },
+      "start": "Run `npm ci && npm start` in the web folder of the BlackLabelMarketing repo (Node 20 or newer).",
+      "portNote": "The port can be moved with BL_MARKETING_WEB_PORT; if it was, update this entry's url to match.",
+      "notes": "Lane P6, shflikawgfhlaigrk/BlackLabelMarketing#8 (draft). Checked against that PR's web/server/server.mjs: DEFAULT_PORT 47310, binds 127.0.0.1, answers only Host 127.0.0.1:<port> or localhost:<port> (else 421), /api/* needs x-bl-surface: marketing (else 403), GET /api/health -> {\"ok\":true,\"surface\":\"marketing\",...}. / needs no header and sends no frame-blocking header."
     },
     {
       "id": "estate",
-      "name": "Estate",
+      "name": "Estate API",
       "url": "http://127.0.0.1:8787",
-      "status": "planned",
-      "notes": "BlackLabelRealEstateAPI worker (JSON surface; GET / = health). Exists once `npx wrangler dev` runs in that repo — 8787 is wrangler's default dev port; real data needs the PG :5433 corpus or the founder-gated managed-PG deploy."
+      "start": "Run `npx wrangler dev` in the BlackLabelRealEstateAPI repo (8787 is wrangler's default dev port).",
+      "notes": "JSON API, not a dashboard: GET / returns health. Real data needs the PG :5433 corpus locally or the founder-gated managed-PG deploy."
     }
   ]
 }

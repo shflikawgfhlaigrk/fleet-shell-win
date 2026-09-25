@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-motion="off">
 <head>
   <meta charset="utf-8" />
   <title>BlackLabel</title>
@@ -8,13 +8,28 @@
 <body>
   <header id="chrome">
     <div id="brand">BlackLabel</div>
-    <nav id="surfaces"></nav>
-    <div id="status"></div>
+    <nav id="surfaces" aria-label="App surfaces"></nav>
+    <div id="status" role="status"></div>
+    <label id="motion" title="">
+      <input type="checkbox" id="motion-toggle" />
+      <span>Motion</span>
+    </label>
   </header>
+  <div id="registry-errors" role="alert" hidden></div>
   <main id="stage">
     <div id="empty">No app surface configured. Add one to src/fleet.json.</div>
+    <section id="panel" hidden aria-live="polite">
+      <h1 id="panel-title"></h1>
+      <div class="row"><span class="k" id="panel-what-k">What failed</span><p id="panel-what"></p></div>
+      <div class="row"><span class="k">Why</span><p id="panel-why"></p></div>
+      <div class="row"><span class="k">What to do next</span><p id="panel-next"></p></div>
+      <button id="panel-retry" type="button" hidden>Retry</button>
+    </section>
     <iframe id="surface" title="app surface"></iframe>
   </main>
-  <script src="main.js"></script>
+  <script type="module">
+    import { boot } from "./main.js";
+    boot();
+  </script>
 </body>
 </html>
