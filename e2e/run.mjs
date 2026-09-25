@@ -121,9 +121,9 @@ async function main() {
     await shot("2-sovereign-not-running");
 
     // ---- Phase 2: bring fixtures up ----
-    await listen(8765, (req, res) => {
+    await listen(8765, (_req, res) => {
       res.writeHead(200, { "content-type": "text/html" });
-      res.end(`<!doctype html><body style="background:#123;color:#fff;font:20px sans-serif"><h1 id="fixture">AceOS fixture ${req.url}</h1></body>`);
+      res.end(`<!doctype html><body style="background:#123;color:#fff;font:20px sans-serif"><h1 id="fixture">AceOS fixture</h1></body>`);
     });
     const utah = await listen(8766, (req, res) => { res.writeHead(426, { upgrade: "websocket" }); res.end(); });
     void utah;

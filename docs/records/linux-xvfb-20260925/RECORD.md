@@ -88,7 +88,7 @@ None of the real dashboards ran in this VM. See "Not proven" below.
   `Depends` line in the deb.
 - `1-aceos-not-running.png`
 - `2-sovereign-not-running.png`
-- `3-aceos-running.png` (fixture framed)
+- `3-aceos-running.png` (fixture framed; re-captured after the fixture stopped echoing the request path, following CodeQL alert #2 — same 21/21 result)
 - `4-utah-wrong-service.png`
 - `5-sovereign-running.png` (fixture found via the port file)
 
