@@ -53,6 +53,25 @@ test("a WebSocket server on the deck's port says who probably holds it", () => {
   assert.match(d.why, /AceOS WS defaults to 8766/);
 });
 
+test("a different service on the port is named, with the field that gave it away", () => {
+  const re = { id: "realestate", name: "Real Estate", url: "http://127.0.0.1:4178", start: "Run `node web/server.mjs`." };
+  const d = describe(re, {
+    state: "wrongService", reason: "health-mismatch",
+    detail: 'http://127.0.0.1:4178 /healthz returned service = "other", expected "blacklabel-realestate-web"', url: re.url,
+  });
+  assert.equal(d.tone, "warn");
+  assert.match(d.what, /is not Real Estate/);
+  assert.match(d.why, /expected "blacklabel-realestate-web"/);
+  assert.match(d.next, /node web\/server\.mjs/);
+});
+
+test("a 421 tells you the host/port in fleet.json doesn't match", () => {
+  const m = { id: "marketing", name: "Marketing", url: "http://127.0.0.1:47310" };
+  const d = describe(m, { state: "wrongService", reason: "http-421", detail: "answered 421 Misdirected Request", url: m.url });
+  assert.match(d.what, /Marketing refused the address/);
+  assert.match(d.next, /src\/fleet\.json/);
+});
+
 test("surfaces without a start hint still get a next step", () => {
   const d = describe({ id: "x", name: "X", url: "http://127.0.0.1:1" }, { state: "down", reason: "refused", detail: "" });
   assert.equal(d.next, "Start X, then press Retry.");

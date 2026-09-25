@@ -13,6 +13,7 @@
 //! network scanner.
 
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::io::{ErrorKind, Read, Write};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, TcpStream};
 use std::path::PathBuf;
@@ -34,6 +35,15 @@ pub struct ProbeTarget {
     /// When true, the health response must be JSON with `"ok": true`.
     #[serde(default)]
     pub expect_ok_json: bool,
+    /// Extra request headers sent on the health request only (never on the
+    /// frame request, so the frame probe sees what the iframe will see).
+    /// e.g. Marketing's `x-bl-surface: marketing`.
+    #[serde(default)]
+    pub health_headers: Option<BTreeMap<String, String>>,
+    /// Fields the health JSON must carry with exactly these values, so a
+    /// different service on the same port isn't mistaken for this one.
+    #[serde(default)]
+    pub expect_fields: Option<serde_json::Map<String, serde_json::Value>>,
     /// Per-request timeout. Clamped to 100..=10_000 ms.
     pub timeout_ms: Option<u64>,
 }
@@ -212,11 +222,47 @@ impl RawResponse {
     }
 }
 
+/// Headers the probe itself controls; a surface may not override them.
+const RESERVED_HEADERS: [&str; 6] = [
+    "host",
+    "connection",
+    "content-length",
+    "transfer-encoding",
+    "user-agent",
+    "accept",
+];
+
+/// Check extra request headers: token-only names, printable values, no CR/LF
+/// (so a fleet.json entry can't inject extra request lines), no reserved names.
+pub fn validate_headers(headers: &BTreeMap<String, String>) -> Result<(), String> {
+    for (name, value) in headers {
+        let token = !name.is_empty()
+            && name
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+        if !token {
+            return Err(format!("header name {name:?} is not a plain token"));
+        }
+        if RESERVED_HEADERS.contains(&name.to_ascii_lowercase().as_str()) {
+            return Err(format!(
+                "header {name:?} is set by the probe and can't be overridden"
+            ));
+        }
+        if value.bytes().any(|b| b < 0x20 || b == 0x7f) {
+            return Err(format!(
+                "header {name:?} has a control character in its value"
+            ));
+        }
+    }
+    Ok(())
+}
+
 /// Send one GET and read the reply. Err is a ready-made result.
 fn http_get(
     target: &LoopbackUrl,
     base: &str,
     timeout: Duration,
+    extra_headers: Option<&BTreeMap<String, String>>,
 ) -> Result<RawResponse, ProbeResult> {
     let mut stream = TcpStream::connect_timeout(&target.addr, timeout).map_err(|e| {
         let reason = match e.kind() {
@@ -241,8 +287,12 @@ fn http_get(
     };
     stream.set_read_timeout(Some(timeout)).map_err(io_err)?;
     stream.set_write_timeout(Some(timeout)).map_err(io_err)?;
+    let mut extra = String::new();
+    for (k, v) in extra_headers.into_iter().flatten() {
+        extra.push_str(&format!("{k}: {v}\r\n"));
+    }
     let req = format!(
-        "GET {} HTTP/1.0\r\nHost: {}\r\nUser-Agent: BlackLabel-fleet-shell\r\nAccept: */*\r\nConnection: close\r\n\r\n",
+        "GET {} HTTP/1.0\r\nHost: {}\r\nUser-Agent: BlackLabel-fleet-shell\r\nAccept: */*\r\n{extra}Connection: close\r\n\r\n",
         target.path, target.host
     );
     stream.write_all(req.as_bytes()).map_err(io_err)?;
@@ -339,6 +389,15 @@ fn frame_refusal(resp: &RawResponse) -> Option<(&'static str, String)> {
 fn classify_status(status: u16, base: &str, what: &str) -> Option<ProbeResult> {
     match status {
         200..=399 => None,
+        421 => Some(
+            ProbeResult::new(
+                ProbeState::WrongService,
+                "http-421",
+                format!("{what} answered 421 Misdirected Request (it rejected the Host this address sends)"),
+                Some(base),
+            )
+            .with_status(status),
+        ),
         426 => Some(
             ProbeResult::new(
                 ProbeState::WrongService,
@@ -406,6 +465,12 @@ pub fn probe_blocking(target: &ProbeTarget, home: Option<PathBuf>) -> ProbeResul
         }
     };
 
+    if let Some(h) = &target.health_headers {
+        if let Err(detail) = validate_headers(h) {
+            return ProbeResult::new(ProbeState::Invalid, "bad-header", detail, Some(&base));
+        }
+    }
+
     if let Some(hp) = &target.health_path {
         let mut health = frame_url.clone();
         health.path = if hp.starts_with('/') {
@@ -413,7 +478,7 @@ pub fn probe_blocking(target: &ProbeTarget, home: Option<PathBuf>) -> ProbeResul
         } else {
             format!("/{hp}")
         };
-        let resp = match http_get(&health, &base, timeout) {
+        let resp = match http_get(&health, &base, timeout, target.health_headers.as_ref()) {
             Ok(r) => r,
             Err(r) => return r,
         };
@@ -438,9 +503,25 @@ pub fn probe_blocking(target: &ProbeTarget, home: Option<PathBuf>) -> ProbeResul
                 .with_status(resp.status);
             }
         }
+        if let Some(fields) = &target.expect_fields {
+            let body = serde_json::from_slice::<serde_json::Value>(&resp.body).ok();
+            for (key, want) in fields {
+                let got = body.as_ref().and_then(|v| v.get(key));
+                if got != Some(want) {
+                    let got = got.map_or("nothing".to_string(), |g| g.to_string());
+                    return ProbeResult::new(
+                        ProbeState::WrongService,
+                        "health-mismatch",
+                        format!("{what} returned {key} = {got}, expected {want}"),
+                        Some(&base),
+                    )
+                    .with_status(resp.status);
+                }
+            }
+        }
     }
 
-    let resp = match http_get(&frame_url, &base, timeout) {
+    let resp = match http_get(&frame_url, &base, timeout, None) {
         Ok(r) => r,
         Err(r) => return r,
     };
@@ -510,6 +591,8 @@ mod tests {
             port_file: None,
             health_path: None,
             expect_ok_json: false,
+            health_headers: None,
+            expect_fields: None,
             timeout_ms: Some(500),
         }
     }
@@ -713,6 +796,137 @@ mod tests {
         );
     }
 
+    /// Like `serve`, but also hands back each raw request it received.
+    fn serve_recording(responses: Vec<&'static str>) -> (u16, std::sync::mpsc::Receiver<String>) {
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = l.local_addr().unwrap().port();
+        let (tx, rx) = std::sync::mpsc::channel();
+        thread::spawn(move || {
+            for resp in responses {
+                let (mut s, _) = l.accept().unwrap();
+                let mut buf = [0u8; 4096];
+                let n = s.read(&mut buf).unwrap_or(0);
+                tx.send(String::from_utf8_lossy(&buf[..n]).into_owned())
+                    .unwrap();
+                let _ = s.write_all(resp.as_bytes());
+            }
+        });
+        (port, rx)
+    }
+
+    fn headers(pairs: &[(&str, &str)]) -> Option<BTreeMap<String, String>> {
+        Some(
+            pairs
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn health_headers_go_on_the_health_request_only() {
+        let (port, rx) = serve_recording(vec![
+            "HTTP/1.0 200 OK\r\n\r\n{\"ok\":true,\"surface\":\"marketing\"}",
+            "HTTP/1.0 200 OK\r\n\r\n<html></html>",
+        ]);
+        let mut t = target(&format!("http://127.0.0.1:{port}"));
+        t.health_path = Some("/api/health".into());
+        t.expect_ok_json = true;
+        t.health_headers = headers(&[("x-bl-surface", "marketing")]);
+        let r = probe_blocking(&t, None);
+        assert_eq!(r.state, ProbeState::Up, "{r:?}");
+        let health = rx.recv().unwrap();
+        let frame = rx.recv().unwrap();
+        assert!(
+            health.starts_with("GET /api/health HTTP/1.0\r\n"),
+            "{health}"
+        );
+        assert!(
+            health.contains("\r\nx-bl-surface: marketing\r\n"),
+            "{health}"
+        );
+        assert!(
+            health.contains(&format!("\r\nHost: 127.0.0.1:{port}\r\n")),
+            "{health}"
+        );
+        assert!(frame.starts_with("GET / HTTP/1.0\r\n"), "{frame}");
+        assert!(
+            !frame.contains("x-bl-surface"),
+            "frame probe mirrors the iframe: {frame}"
+        );
+    }
+
+    #[test]
+    fn unsafe_headers_are_refused_before_any_socket_opens() {
+        for bad in [
+            headers(&[("x-a", "v\r\nHost: evil")]),
+            headers(&[("x a", "v")]),
+            headers(&[("", "v")]),
+            headers(&[("Host", "evil.example")]),
+            headers(&[("Content-Length", "5")]),
+        ] {
+            let mut t = target(&format!("http://127.0.0.1:{}", closed_port()));
+            t.health_path = Some("/h".into());
+            t.health_headers = bad.clone();
+            let r = probe_blocking(&t, None);
+            assert_eq!(
+                (r.state, r.reason.as_str()),
+                (ProbeState::Invalid, "bad-header"),
+                "{bad:?} -> {r:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn expect_fields_identify_the_service() {
+        let fields: serde_json::Map<String, serde_json::Value> =
+            serde_json::from_str(r#"{"service":"blacklabel-realestate-web"}"#).unwrap();
+        let port = serve(vec![
+            "HTTP/1.0 200 OK\r\n\r\n{\"ok\":true,\"service\":\"blacklabel-realestate-web\"}",
+            "HTTP/1.0 200 OK\r\n\r\n<html></html>",
+        ]);
+        let mut t = target(&format!("http://127.0.0.1:{port}"));
+        t.health_path = Some("/healthz".into());
+        t.expect_ok_json = true;
+        t.expect_fields = Some(fields.clone());
+        assert_eq!(probe_blocking(&t, None).state, ProbeState::Up);
+
+        let port = serve(vec![
+            "HTTP/1.0 200 OK\r\n\r\n{\"ok\":true,\"service\":\"something-else\"}",
+        ]);
+        t.url = Some(format!("http://127.0.0.1:{port}"));
+        let r = probe_blocking(&t, None);
+        assert_eq!(
+            (r.state, r.reason.as_str()),
+            (ProbeState::WrongService, "health-mismatch")
+        );
+        assert!(
+            r.detail
+                .contains(r#"service = "something-else", expected "blacklabel-realestate-web""#),
+            "{}",
+            r.detail
+        );
+
+        let port = serve(vec!["HTTP/1.0 200 OK\r\n\r\nnot json"]);
+        t.url = Some(format!("http://127.0.0.1:{port}"));
+        t.expect_ok_json = false;
+        let r = probe_blocking(&t, None);
+        assert_eq!(r.reason, "health-mismatch");
+        assert!(r.detail.contains("service = nothing"), "{}", r.detail);
+    }
+
+    #[test]
+    fn misdirected_request_is_wrong_service() {
+        let port = serve(vec![
+            "HTTP/1.0 421 Misdirected Request\r\n\r\n{\"ok\":false}",
+        ]);
+        let r = probe_blocking(&target(&format!("http://127.0.0.1:{port}")), None);
+        assert_eq!(
+            (r.state, r.reason.as_str(), r.http_status),
+            (ProbeState::WrongService, "http-421", Some(421))
+        );
+    }
+
     #[test]
     fn port_file_resolution() {
         let dir = std::env::temp_dir().join(format!("fleet-probe-{}", std::process::id()));
@@ -750,6 +964,8 @@ mod tests {
             port_file: Some("~/.sovereign/dashboard.port".into()),
             health_path: Some("api/health".into()),
             expect_ok_json: true,
+            health_headers: None,
+            expect_fields: None,
             timeout_ms: Some(300),
         };
         let r = probe_blocking(&t, home);

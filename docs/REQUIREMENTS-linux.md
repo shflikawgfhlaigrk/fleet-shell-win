@@ -14,7 +14,13 @@ are in `docs/records/`.
 ## R2. Surfaces (`src/fleet.json`)
 - R2.1 AceOS `127.0.0.1:8765` (default), HQ `127.0.0.1:8791`, Utah deck
   `127.0.0.1:8766`, Sovereign (port from `~/.sovereign/dashboard.port`),
-  Estate API `127.0.0.1:8787`.
+  Real Estate web `127.0.0.1:4178` (health `/healthz`, service
+  `blacklabel-realestate-web`), Marketing web `127.0.0.1:47310` (health
+  `/api/health`, which needs the header `x-bl-surface: marketing`), and
+  Estate API `127.0.0.1:8787`. Real Estate and Marketing were added at the
+  planning session's request (2026-09-25 21:24 UTC).
+- R2.4 The shell only points at the product servers. It does not start,
+  bundle or edit them.
 - R2.2 Only loopback `http://` surfaces. The Rust probe refuses anything
   else before opening a socket.
 - R2.3 Invalid entries are listed in a visible banner, not dropped silently.

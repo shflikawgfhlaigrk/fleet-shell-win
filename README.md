@@ -30,6 +30,8 @@ A small Tauri v2 app.
 | `hq` | HQ | `http://127.0.0.1:8791` | BlackLabel HQ dashboard |
 | `utah` | Utah deck | `http://127.0.0.1:8766` | Utah deck |
 | `sovereign` | Sovereign | port read from `~/.sovereign/dashboard.port`, checked via `/api/health` → `{"ok": true}` | Sovereign daemon, `sov start` |
+| `realestate` | Real Estate | `http://127.0.0.1:4178` (checked via `/healthz`, which must say `service: blacklabel-realestate-web`) | `node web/server.mjs` in BlackLabelRealEstate (port override: `BLRE_WEB_PORT`) |
+| `marketing` | Marketing | `http://127.0.0.1:47310` (checked via `/api/health` with header `x-bl-surface: marketing`, which must say `surface: marketing`) | `cd web && npm ci && npm start` in BlackLabelMarketing (port override: `BL_MARKETING_WEB_PORT`) |
 | `estate` | Estate API | `http://127.0.0.1:8787` | `npx wrangler dev` in BlackLabelRealEstateAPI (JSON, not a dashboard) |
 
 `fleet.json` holds the sources and caveats for each entry (`notes`).
@@ -48,7 +50,8 @@ separately:
 - port file missing, unreadable or invalid
 - a WebSocket server holding the port (HTTP 426)
 - a non-HTTP listener, or one that stays silent
-- a health check that doesn't return `ok: true`
+- a health check that doesn't return `ok: true`, or names a different service
+- HTTP 421 (the service rejected the host/port the shell used)
 - HTTP errors (5xx and other statuses)
 - `X-Frame-Options` / `frame-ancestors` refusing to be framed
 - a misconfigured entry
@@ -72,6 +75,11 @@ The keys are:
 - `url`, a loopback `http://` URL. Use it or `portFile`, not both.
 - `portFile`, a file holding the port number. `~/` is allowed.
 - `healthPath` and `expectOkJson`, both optional.
+- `healthHeaders`, optional extra headers sent on the health request only
+  (never on the framed page). Plain token names; no CR/LF; `Host` and other
+  probe-owned headers can't be overridden.
+- `expectFields`, optional fields the health JSON must carry with exactly
+  these values, so a different service on the port isn't mistaken for this one.
 - `start`, shown as the next step when the surface is down.
 - `portNote`, shown when another program holds the port.
 - `notes`, a free-form record that the chrome ignores.

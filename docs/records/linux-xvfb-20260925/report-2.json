@@ -1,0 +1,134 @@
+{
+  "binary": "/home/user/fleet-shell-win/src-tauri/target/release/fleet-shell",
+  "startedAt": "2026-09-25T21:31:20.492Z",
+  "checks": [
+    {
+      "name": "window title",
+      "pass": true
+    },
+    {
+      "name": "tabs",
+      "pass": true
+    },
+    {
+      "name": "AceOS not running panel title",
+      "pass": true,
+      "detail": "AceOS: Not running"
+    },
+    {
+      "name": "what failed names the address",
+      "pass": true,
+      "detail": "AceOS is not running: nothing is listening at http://127.0.0.1:8765."
+    },
+    {
+      "name": "why is present",
+      "pass": true,
+      "detail": "The connection was refused, so no program is serving that port."
+    },
+    {
+      "name": "next step is present",
+      "pass": true,
+      "detail": "Start the AceOS HQ server: run `python run_hq_http.py` in the AceOS repo (on the Mac, launchd runs it as com.ace.hq_http)."
+    },
+    {
+      "name": "iframe not shown",
+      "pass": true
+    },
+    {
+      "name": "every tab probed as down",
+      "pass": true,
+      "detail": [
+        "down",
+        "down",
+        "down",
+        "down",
+        "down",
+        "down",
+        "down"
+      ]
+    },
+    {
+      "name": "motion off on empty profile",
+      "pass": true
+    },
+    {
+      "name": "motion toggle unchecked on empty profile",
+      "pass": true
+    },
+    {
+      "name": "Sovereign not running (no port file)",
+      "pass": true,
+      "detail": "Sovereign is not running: its port file /tmp/fleet-e2e-home-txesJx/.sovereign/dashboard.port does not exist."
+    },
+    {
+      "name": "Marketing not running names :47310 and its start command",
+      "pass": true,
+      "detail": "Marketing is not running: nothing is listening at http://127.0.0.1:47310."
+    },
+    {
+      "name": "AceOS framed once running",
+      "pass": true,
+      "detail": "http://127.0.0.1:8765"
+    },
+    {
+      "name": "panel hidden when running",
+      "pass": true
+    },
+    {
+      "name": "AceOS dot is up",
+      "pass": true
+    },
+    {
+      "name": "Utah deck port held by a WebSocket server",
+      "pass": true,
+      "detail": "Utah deck: Something else is on this port"
+    },
+    {
+      "name": "Utah explains the AceOS WebSocket clash",
+      "pass": true,
+      "detail": "http://127.0.0.1:8766/ answered 426 Upgrade Required (a WebSocket server, not a dashboard). Another program holds this port. AceOS's event WebSocket (acesd/core/ws_server.py) also defaults to 127.0.0.1:8766. If the shell reports a WebSocket server here, that is AceOS holding the deck's port."
+    },
+    {
+      "name": "Sovereign found through ~/.sovereign/dashboard.port",
+      "pass": true,
+      "detail": 8779
+    },
+    {
+      "name": "Real Estate framed after /healthz names the service",
+      "pass": true
+    },
+    {
+      "name": "Marketing health probe carried x-bl-surface: marketing",
+      "pass": true,
+      "detail": {
+        "path": "/api/health",
+        "surfaceHeader": "marketing"
+      }
+    },
+    {
+      "name": "Marketing framed",
+      "pass": true
+    },
+    {
+      "name": "toggle ON opens the gate (unless system Reduce Motion)",
+      "pass": true,
+      "detail": "on"
+    },
+    {
+      "name": "toggle ON persisted",
+      "pass": true
+    },
+    {
+      "name": "toggle OFF closes the gate",
+      "pass": true
+    },
+    {
+      "name": "no running CSS animations with motion off",
+      "pass": true
+    }
+  ],
+  "home": "/tmp/fleet-e2e-home-txesJx",
+  "reduceMotionSystem": false,
+  "finishedAt": "2026-09-25T21:31:30.892Z",
+  "result": "PASS"
+}

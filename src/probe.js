@@ -105,6 +105,18 @@ export function describe(surface, result) {
         `${d}.${surface.portNote ? " " + surface.portNote : ""}`,
         `Find what holds the port (\`ss -ltnp\` on Linux, \`netstat -ano\` on Windows), stop it, then start ${name}.`,
       );
+    case "health-mismatch":
+      return out(
+        `The program on ${at} is not ${name}.`,
+        `${d}. Another service is answering on ${name}'s port.`,
+        `Stop whatever holds the port, start ${name}, then press Retry. ${start}`,
+      );
+    case "http-421":
+      return out(
+        `${name} refused the address the shell used (${at}).`,
+        `${d}. The service only answers requests addressed to its own loopback host and port.`,
+        `Check that src/fleet.json uses the exact host and port ${name} listens on (for example 127.0.0.1 and its configured port), then press Retry.`,
+      );
     case "health-not-ok":
       return out(
         `The program on ${at} did not identify itself as ${name}.`,
@@ -123,6 +135,7 @@ export function describe(surface, result) {
         `Open ${at} in a browser, or relax that header for loopback requests in ${name}.`,
       );
     case "not-loopback":
+    case "bad-header":
     case "bad-url":
     case "bad-target":
     case "port-file-path":

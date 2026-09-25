@@ -97,7 +97,7 @@ async function main() {
     await waitFor("AceOS probe result", async () =>
       (await js(`return document.getElementById("panel").dataset.tone`)) === "down");
     check("window title", (await wd("GET", `${S}/title`)) === "BlackLabel");
-    check("tabs", (await js(`return [...document.querySelectorAll("#surfaces button")].map(b => b.textContent)`)).join("|") === "AceOS|HQ|Utah deck|Sovereign|Estate API");
+    check("tabs", (await js(`return [...document.querySelectorAll("#surfaces button")].map(b => b.textContent)`)).join("|") === "AceOS|HQ|Utah deck|Sovereign|Real Estate|Marketing|Estate API");
     const title = await text("panel-title");
     check("AceOS not running panel title", title === "AceOS: Not running", title);
     const what = await text("panel-what");
@@ -120,6 +120,13 @@ async function main() {
     check("Sovereign not running (no port file)", /dashboard\.port does not exist/.test(await text("panel-what")), await text("panel-what"));
     await shot("2-sovereign-not-running");
 
+    await js(`document.querySelector('#surfaces button[data-id="marketing"]').click()`);
+    await waitFor("Marketing panel", async () => (await text("panel-title")) === "Marketing: Not running");
+    check("Marketing not running names :47310 and its start command",
+      /127\.0\.0\.1:47310/.test(await text("panel-what")) && /npm ci && npm start/.test(await text("panel-next")),
+      await text("panel-what"));
+    await shot("2b-marketing-not-running");
+
     // ---- Phase 2: bring fixtures up ----
     await listen(8765, (_req, res) => {
       res.writeHead(200, { "content-type": "text/html" });
@@ -131,6 +138,33 @@ async function main() {
       if (req.url === "/api/health") { res.writeHead(200, { "content-type": "application/json" }); res.end('{"ok": true}'); return; }
       res.writeHead(200, { "content-type": "text/html" });
       res.end(`<!doctype html><body style="background:#221;color:#fff;font:20px sans-serif"><h1>Sovereign fixture</h1></body>`);
+    });
+    // Real Estate stand-in: same /healthz body and CSP as BlackLabelRealEstate#4 web/server.mjs.
+    await listen(4178, (req, res) => {
+      const csp = "default-src 'self'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self' https: http://127.0.0.1:* http://localhost:*; base-uri 'none'; form-action 'none'; object-src 'none'";
+      if (req.url === "/healthz") {
+        res.writeHead(200, { "content-type": "application/json", "content-security-policy": csp });
+        res.end('{"ok":true,"service":"blacklabel-realestate-web"}');
+        return;
+      }
+      res.writeHead(200, { "content-type": "text/html", "content-security-policy": csp });
+      res.end(`<!doctype html><body style="background:#132;color:#fff;font:20px sans-serif"><h1>Real Estate fixture</h1></body>`);
+    });
+    // Marketing stand-in: same guards as BlackLabelMarketing#8 web/server/server.mjs
+    // (Host allow-list -> 421, /api/* without x-bl-surface -> 403).
+    const mHits = [];
+    await listen(47310, (req, res) => {
+      mHits.push({ path: req.url, surfaceHeader: req.headers["x-bl-surface"] ?? null });
+      const allowed = new Set(["127.0.0.1:47310", "localhost:47310"]);
+      const json = (status, body) => { res.writeHead(status, { "content-type": "application/json" }); res.end(JSON.stringify(body)); };
+      if (!allowed.has(String(req.headers.host || "").toLowerCase())) return json(421, { ok: false });
+      if (req.url.startsWith("/api/")) {
+        if (req.headers["x-bl-surface"] !== "marketing") return json(403, { ok: false, error: "Missing surface header." });
+        if (req.url === "/api/health") return json(200, { ok: true, surface: "marketing", port: 47310 });
+        return json(404, { ok: false });
+      }
+      res.writeHead(200, { "content-type": "text/html" });
+      res.end(`<!doctype html><body style="background:#312;color:#fff;font:20px sans-serif"><h1>Marketing fixture</h1></body>`);
     });
     mkdirSync(join(home, ".sovereign"), { recursive: true });
     writeFileSync(join(home, ".sovereign/dashboard.port"), `${SOVEREIGN_PORT}\n`);
@@ -155,6 +189,20 @@ async function main() {
     check("Sovereign found through ~/.sovereign/dashboard.port", true, SOVEREIGN_PORT);
     await sleep(800);
     await shot("5-sovereign-running");
+
+    await js(`document.querySelector('#surfaces button[data-id="realestate"]').click()`);
+    await waitFor("Real Estate framed", async () =>
+      (await js(`return document.getElementById("surface").getAttribute("src")`)) === "http://127.0.0.1:4178", 10000);
+    check("Real Estate framed after /healthz names the service", true);
+
+    await js(`document.querySelector('#surfaces button[data-id="marketing"]').click()`);
+    await waitFor("Marketing framed", async () =>
+      (await js(`return document.getElementById("surface").getAttribute("src")`)) === "http://127.0.0.1:47310", 10000);
+    const healthHit = mHits.find((h) => h.path === "/api/health");
+    check("Marketing health probe carried x-bl-surface: marketing", healthHit && healthHit.surfaceHeader === "marketing", healthHit);
+    check("Marketing framed", true);
+    await sleep(800);
+    await shot("6-marketing-running");
 
     // ---- Motion toggle on the real binary ----
     await js(`const t = document.getElementById("motion-toggle"); t.click();`);

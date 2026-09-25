@@ -54,7 +54,7 @@ test("every tab gets a probed state dot", async () => {
   await shell(win).boot();
   await tick();
   const tabs = [...win.document.querySelectorAll("#surfaces button")];
-  assert.deepEqual(tabs.map((b) => b.textContent), ["AceOS", "HQ", "Utah deck", "Sovereign", "Estate API"]);
+  assert.deepEqual(tabs.map((b) => b.textContent), ["AceOS", "HQ", "Utah deck", "Sovereign", "Real Estate", "Marketing", "Estate API"]);
   for (const b of tabs) {
     assert.equal(b.dataset.tone, "down", b.textContent);
     assert.equal(b.title, "Not running");
@@ -222,4 +222,21 @@ test("boot() wires window.__TAURI__.core.invoke and reports HTTP errors loading 
   win2.fetch = async () => ({ ok: false, status: 404 });
   await boot(win2);
   assert.match(text(win2, "panel-why"), /fleet\.json: HTTP 404/);
+});
+
+test("Real Estate and Marketing show the not-running panel with their start commands", async () => {
+  const win = makeDom();
+  const calls = [];
+  const s = shell(win, { invoke: fakeInvoke({}, calls) });
+  await s.boot();
+  await s.activate("realestate");
+  assert.equal(text(win, "panel-title"), "Real Estate: Not running");
+  assert.match(text(win, "panel-what"), /nothing is listening at http:\/\/127\.0\.0\.1:4178/);
+  assert.match(text(win, "panel-next"), /node web\/server\.mjs/);
+  await s.activate("marketing");
+  assert.equal(text(win, "panel-title"), "Marketing: Not running");
+  assert.match(text(win, "panel-what"), /http:\/\/127\.0\.0\.1:47310/);
+  assert.match(text(win, "panel-next"), /npm ci && npm start/);
+  const m = calls.filter((t) => t.url === "http://127.0.0.1:47310").at(-1);
+  assert.deepEqual(m.healthHeaders, { "x-bl-surface": "marketing" }, "the probe carries the surface header");
 });

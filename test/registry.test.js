@@ -5,10 +5,10 @@ import { validateRegistry, pickInitial, probeTarget } from "../src/registry.js";
 
 const shipped = JSON.parse(readFileSync(new URL("../src/fleet.json", import.meta.url), "utf8"));
 
-test("shipped fleet.json is valid and lists the five local surfaces", () => {
+test("shipped fleet.json is valid and lists the seven local surfaces", () => {
   const { surfaces, errors } = validateRegistry(shipped);
   assert.deepEqual(errors, []);
-  assert.deepEqual(surfaces.map((s) => s.id), ["aceos", "hq", "utah", "sovereign", "estate"]);
+  assert.deepEqual(surfaces.map((s) => s.id), ["aceos", "hq", "utah", "sovereign", "realestate", "marketing", "estate"]);
   const byId = Object.fromEntries(surfaces.map((s) => [s.id, s]));
   assert.equal(byId.aceos.url, "http://127.0.0.1:8765");
   assert.equal(byId.hq.url, "http://127.0.0.1:8791");
@@ -17,6 +17,29 @@ test("shipped fleet.json is valid and lists the five local surfaces", () => {
   assert.equal(byId.sovereign.portFile, "~/.sovereign/dashboard.port");
   assert.equal(byId.sovereign.healthPath, "/api/health");
   assert.equal(byId.sovereign.expectOkJson, true);
+});
+
+test("Real Estate web: :4178, /healthz must name the service", () => {
+  const re = validateRegistry(shipped).surfaces.find((s) => s.id === "realestate");
+  assert.equal(re.url, "http://127.0.0.1:4178");
+  assert.deepEqual(probeTarget(re), {
+    url: "http://127.0.0.1:4178", portFile: null, healthPath: "/healthz", expectOkJson: true,
+    healthHeaders: null, expectFields: { service: "blacklabel-realestate-web" }, timeoutMs: 1500,
+  });
+  assert.match(re.start, /node web\/server\.mjs/);
+  assert.match(re.portNote, /BLRE_WEB_PORT/);
+});
+
+test("Marketing web: :47310, health probe sends x-bl-surface and checks the surface name", () => {
+  const m = validateRegistry(shipped).surfaces.find((s) => s.id === "marketing");
+  assert.equal(m.url, "http://127.0.0.1:47310");
+  const t = probeTarget(m);
+  assert.equal(t.healthPath, "/api/health");
+  assert.deepEqual(t.healthHeaders, { "x-bl-surface": "marketing" });
+  assert.deepEqual(t.expectFields, { surface: "marketing" });
+  assert.equal(t.expectOkJson, true);
+  assert.match(m.start, /npm ci && npm start/);
+  assert.match(m.portNote, /BL_MARKETING_WEB_PORT/);
 });
 
 test("every shipped surface says how to start it", () => {
@@ -55,6 +78,15 @@ test("rejects bad entries with a reason and keeps the good ones", () => {
     [{ ...ok, healthPath: "api" }, /healthPath must start with \//],
     [{ ...ok, expectOkJson: true }, /expectOkJson needs a healthPath/],
     [{ ...ok, start: 5 }, /start must be text/],
+    [{ ...ok, healthPath: "/h", healthHeaders: { "x-a": "v\r\nHost: evil" } }, /needs a plain text value/],
+    [{ ...ok, healthPath: "/h", healthHeaders: { "x a": "v" } }, /not a plain token/],
+    [{ ...ok, healthPath: "/h", healthHeaders: { Host: "evil" } }, /can't be overridden/],
+    [{ ...ok, healthPath: "/h", healthHeaders: ["x"] }, /healthHeaders must be an object/],
+    [{ ...ok, healthPath: "/h", healthHeaders: { "x-a": 1 } }, /needs a plain text value/],
+    [{ ...ok, healthHeaders: { "x-a": "v" } }, /need a healthPath/],
+    [{ ...ok, healthPath: "/h", expectFields: {} }, /non-empty object/],
+    [{ ...ok, healthPath: "/h", expectFields: { a: { b: 1 } } }, /text, numbers or true\/false/],
+    [{ ...ok, expectFields: { a: "b" } }, /need a healthPath/],
     ["nope", /not an object/],
   ];
   for (const [bad, re] of cases) {
@@ -87,9 +119,11 @@ test("duplicate ids and multiple defaults are reported", () => {
 
 test("probeTarget maps a surface to the Rust command's shape", () => {
   assert.deepEqual(probeTarget(ok), {
-    url: "http://127.0.0.1:9000", portFile: null, healthPath: null, expectOkJson: false, timeoutMs: 1500,
+    url: "http://127.0.0.1:9000", portFile: null, healthPath: null, expectOkJson: false,
+    healthHeaders: null, expectFields: null, timeoutMs: 1500,
   });
   assert.deepEqual(probeTarget({ id: "s", name: "S", portFile: "~/p", healthPath: "/h", expectOkJson: true }, 900), {
-    url: null, portFile: "~/p", healthPath: "/h", expectOkJson: true, timeoutMs: 900,
+    url: null, portFile: "~/p", healthPath: "/h", expectOkJson: true,
+    healthHeaders: null, expectFields: null, timeoutMs: 900,
   });
 });

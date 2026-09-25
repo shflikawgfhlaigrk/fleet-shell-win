@@ -34,6 +34,35 @@
       "notes": "No fixed port: the daemon writes its bound port (8765-8785, off 8765 when AceOS holds it) to ~/.sovereign/dashboard.port, and /api/health answers {\"ok\": true}. Source: BlackLabelSovereign Sources/ToolClient.swift. The daemon is launchd-managed on the Mac; whether it runs on Linux or Windows is not verified."
     },
     {
+      "id": "realestate",
+      "name": "Real Estate",
+      "url": "http://127.0.0.1:4178",
+      "healthPath": "/healthz",
+      "expectOkJson": true,
+      "expectFields": {
+        "service": "blacklabel-realestate-web"
+      },
+      "start": "Run `node web/server.mjs` in the BlackLabelRealEstate repo (Node 22 or newer).",
+      "portNote": "The port can be moved with BLRE_WEB_PORT; if it was, update this entry's url to match.",
+      "notes": "Lane P3, shflikawgfhlaigrk/BlackLabelRealEstate#4 (draft). Checked against that PR's web/server.mjs: DEFAULT_PORT 4178, loopback only, GET /healthz -> {\"ok\":true,\"service\":\"blacklabel-realestate-web\"}. Its CSP has no frame-ancestors and it sends no X-Frame-Options, so it can be framed."
+    },
+    {
+      "id": "marketing",
+      "name": "Marketing",
+      "url": "http://127.0.0.1:47310",
+      "healthPath": "/api/health",
+      "expectOkJson": true,
+      "healthHeaders": {
+        "x-bl-surface": "marketing"
+      },
+      "expectFields": {
+        "surface": "marketing"
+      },
+      "start": "Run `npm ci && npm start` in the web folder of the BlackLabelMarketing repo (Node 20 or newer).",
+      "portNote": "The port can be moved with BL_MARKETING_WEB_PORT; if it was, update this entry's url to match.",
+      "notes": "Lane P6, shflikawgfhlaigrk/BlackLabelMarketing#8 (draft). Checked against that PR's web/server/server.mjs: DEFAULT_PORT 47310, binds 127.0.0.1, answers only Host 127.0.0.1:<port> or localhost:<port> (else 421), /api/* needs x-bl-surface: marketing (else 403), GET /api/health -> {\"ok\":true,\"surface\":\"marketing\",...}. / needs no header and sends no frame-blocking header."
+    },
+    {
       "id": "estate",
       "name": "Estate API",
       "url": "http://127.0.0.1:8787",

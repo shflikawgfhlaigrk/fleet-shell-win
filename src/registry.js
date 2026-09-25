@@ -46,8 +46,35 @@ function entryProblems(s) {
     p.push("healthPath must start with /");
   }
   if (s.expectOkJson && s.healthPath === undefined) p.push("expectOkJson needs a healthPath");
+  if (s.healthHeaders !== undefined) p.push(...headerProblems(s.healthHeaders));
+  if (s.expectFields !== undefined) {
+    const f = s.expectFields;
+    if (!f || typeof f !== "object" || Array.isArray(f) || !Object.keys(f).length) {
+      p.push("expectFields must be a non-empty object");
+    } else if (Object.values(f).some((v) => v === null || typeof v === "object")) {
+      p.push("expectFields values must be text, numbers or true/false");
+    }
+  }
+  if ((s.healthHeaders !== undefined || s.expectFields !== undefined) && s.healthPath === undefined) {
+    p.push("healthHeaders and expectFields need a healthPath");
+  }
   for (const key of ["start", "notes", "portNote"]) {
     if (s[key] !== undefined && typeof s[key] !== "string") p.push(`${key} must be text`);
+  }
+  return p;
+}
+
+// Mirrors validate_headers in src-tauri/src/probe.rs.
+const RESERVED = new Set(["host", "connection", "content-length", "transfer-encoding", "user-agent", "accept"]);
+function headerProblems(h) {
+  if (!h || typeof h !== "object" || Array.isArray(h)) return ["healthHeaders must be an object of name: value"];
+  const p = [];
+  for (const [name, value] of Object.entries(h)) {
+    if (!/^[A-Za-z0-9_-]+$/.test(name)) p.push(`header name ${JSON.stringify(name)} is not a plain token`);
+    else if (RESERVED.has(name.toLowerCase())) p.push(`header ${JSON.stringify(name)} is set by the probe and can't be overridden`);
+    if (typeof value !== "string" || /[\x00-\x1f\x7f]/.test(value)) {
+      p.push(`header ${JSON.stringify(name)} needs a plain text value`);
+    }
   }
   return p;
 }
@@ -63,6 +90,8 @@ export function probeTarget(surface, timeoutMs = 1500) {
     portFile: surface.portFile ?? null,
     healthPath: surface.healthPath ?? null,
     expectOkJson: !!surface.expectOkJson,
+    healthHeaders: surface.healthHeaders ?? null,
+    expectFields: surface.expectFields ?? null,
     timeoutMs,
   };
 }
